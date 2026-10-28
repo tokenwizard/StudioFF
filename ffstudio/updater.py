@@ -66,6 +66,11 @@ def is_git_checkout() -> bool:
 	return os.path.isdir(os.path.join(APP_ROOT, '.git'))
 
 
+def can_update_itself() -> bool:
+	"""the update helper is a powershell script, so only a windows copy that is no git checkout installs releases itself"""
+	return sys.platform == 'win32' and not is_git_checkout()
+
+
 def remove_retired_files() -> None:
 	"""deletes what an update left behind from older releases, never in a git checkout where git owns the files"""
 	if is_git_checkout():

@@ -1,7 +1,6 @@
 import glob
 import os
 import re
-import subprocess
 import time
 from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Tuple
@@ -13,6 +12,7 @@ from PySide6.QtWidgets import QAbstractItemView, QApplication, QFileDialog, QHBo
 from qfluentwidgets import Action, BodyLabel, CaptionLabel, ComboBox, FluentIcon, Flyout, FlyoutAnimationType, LineEdit, ListItemDelegate, ListWidget, MessageBox, PrimaryPushButton, ProgressBar, PushButton, RoundMenu, SegmentedWidget, SimpleCardWidget, Slider, StrongBodyLabel, SubtitleLabel, TogglePushButton, ToggleToolButton, ToolTipFilter, TransparentPushButton, getFont, isDarkTheme, themeColor
 
 from ffstudio.config import APP_DIR, PREVIEW_DIR
+from ffstudio.environment import reveal_in_file_manager
 from ffstudio.faces import FACE_GROUPS, MASK_GROUPS, FaceProbe, describe_faces, describe_landmarks, describe_mask, face_landmarks, face_tag, read_mask
 from ffstudio.media import GIF_EXTENSIONS, VideoReader, extension, format_length, format_timecode, media_kind, read_frame, thumbnail, to_pixmap, video_length, write_image
 from ffstudio.nsfw import BLOCKED_TITLE, NsfwDialog, show_blocked_bar
@@ -1269,7 +1269,7 @@ class BatchPage(SourceSelection, QWidget):
 			self.session.notify.emit('warning', 'Busy', 'FaceFusion is already running: %s. Try again once it has finished.' % self.session.task)
 			return
 		if not self.running and not folder_is_writable(folder):
-			self.session.notify.emit('error', 'Cannot save to this folder', 'Windows does not allow saving to %s. Choose another output folder, such as Videos or Documents.' % folder)
+			self.session.notify.emit('error', 'Cannot save to this folder', 'StudioFF cannot save to %s. Choose another output folder, such as Videos or Documents.' % folder)
 			return
 		if os.path.isfile(item.get('output')) and not self.confirm_replace([ item ]):
 			return
@@ -2029,8 +2029,8 @@ class BatchPage(SourceSelection, QWidget):
 		target = os.path.normpath(self.items[row].get('target'))
 		menu = RoundMenu(parent = self)
 		menu.addAction(Action(FluentIcon.COPY, 'Copy target file name', triggered = lambda: QApplication.clipboard().setText(os.path.basename(target))))
-		# explorer opens the target's folder with the target picked
-		menu.addAction(Action(FluentIcon.FOLDER, 'Open Folder…', triggered = lambda: subprocess.Popen([ 'explorer', '/select,', target ])))
+		# the file manager opens the target's folder with the target picked
+		menu.addAction(Action(FluentIcon.FOLDER, 'Open Folder…', triggered = lambda: reveal_in_file_manager(target)))
 		menu.exec(position)
 
 	def show_item_result(self, list_item) -> None:
@@ -2086,7 +2086,7 @@ class BatchPage(SourceSelection, QWidget):
 		# with Sub-Folders on every source has its own folder, each is checked and created here
 		for folder in sorted({ os.path.dirname(item.get('output')) for item in items }):
 			if not folder_is_writable(folder):
-				self.session.notify.emit('error', 'Cannot save to this folder', 'Windows does not allow saving to %s. Choose another output folder, such as Videos or Documents.' % folder)
+				self.session.notify.emit('error', 'Cannot save to this folder', 'StudioFF cannot save to %s. Choose another output folder, such as Videos or Documents.' % folder)
 				return
 		replacing = [ item for item in items if os.path.isfile(item.get('output')) and self.item_status(item) != 'skip' ]
 		if replacing and not self.confirm_replace(replacing):

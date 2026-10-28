@@ -1,11 +1,16 @@
 import json
 import os
 import shutil
+import sys
 import time
 from typing import Any, Dict
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-APPDATA_DIR = os.environ.get('APPDATA') or os.path.expanduser('~')
+if sys.platform == 'win32':
+	APPDATA_DIR = os.environ.get('APPDATA') or os.path.expanduser('~')
+else:
+	APPDATA_DIR = os.environ.get('XDG_CONFIG_HOME') or os.path.join(os.path.expanduser('~'), '.config')
+UI_FONT = 'Segoe UI' if sys.platform == 'win32' else 'sans-serif'
 DATA_DIR = os.environ.get('FFSTUDIO_DATA_DIR') or os.path.join(APPDATA_DIR, 'StudioFF')
 # the app was called FaceFusion Studio before v0.40
 LEGACY_DATA_DIR = os.path.join(APPDATA_DIR, 'FaceFusionStudio')

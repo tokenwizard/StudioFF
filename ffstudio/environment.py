@@ -3,7 +3,9 @@ import json
 import os
 import platform
 import shutil
+import signal
 import subprocess
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -11,7 +13,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from PySide6.QtCore import QProcessEnvironment
 
-CREATE_NO_WINDOW = 0x08000000
+IS_WINDOWS = sys.platform == 'win32'
+# subprocess refuses creationflags other than 0 outside windows
+CREATE_NO_WINDOW = 0x08000000 if IS_WINDOWS else 0
 
 
 def is_facefusion_root(path : str) -> bool:
@@ -151,7 +155,24 @@ def is_newer_version(tag : str, current : str) -> bool:
 	return bool(newer) and newer + (0,) * (size - len(newer)) > older + (0,) * (size - len(older))
 
 
-def read_windows_version() -> str:
+def read_linux_version() -> str:
+	"""the distribution's pretty name from os-release and the kernel version"""
+	name = ''
+	for path in [ '/etc/os-release', '/usr/lib/os-release' ]:
+		try:
+			with open(path, encoding = 'utf-8') as release_file:
+				for line in release_file:
+					if line.startswith('PRETTY_NAME='):
+						name = line.split('=', 1)[1].strip().strip('"\'')
+			break
+		except OSError:
+			pass
+	return '%s  ·  kernel %s' % (name or platform.system(), platform.release())
+
+
+def read_os_version() -> str:
+	if not IS_WINDOWS:
+		return read_linux_version()
 	try:
 		import winreg
 		with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, 'SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion') as key:
@@ -170,9 +191,16 @@ def read_windows_version() -> str:
 	return ' '.join(part for part in [ product, release ] if part) + '  ·  version 10.0.%s%s' % (build, '.' + revision if revision else '')
 
 
+def env_python(prefix : str) -> str:
+	"""the python of a venv or conda environment: <prefix>\\python.exe or <prefix>\\Scripts\\python.exe on windows, <prefix>/bin/python elsewhere"""
+	if IS_WINDOWS:
+		return os.path.join(prefix, 'python.exe') if os.path.isdir(os.path.join(prefix, 'conda-meta')) else os.path.join(prefix, 'Scripts', 'python.exe')
+	return os.path.join(prefix, 'bin', 'python')
+
+
 def get_env_prefix(python_path : str) -> str:
 	python_dir = os.path.dirname(os.path.abspath(python_path))
-	if os.path.basename(python_dir).lower() == 'scripts':
+	if os.path.basename(python_dir).lower() in ('scripts', 'bin'):
 		return os.path.dirname(python_dir)
 	return python_dir
 
@@ -182,12 +210,17 @@ def is_conda_env(python_path : str) -> bool:
 
 
 def find_conda() -> Optional[str]:
-	conda = shutil.which('conda') or shutil.which('conda.bat')
-	if conda:
+	# CONDA_EXE is set by conda's shell hook, where conda itself is only a shell function
+	conda = shutil.which('conda') or shutil.which('conda.bat') or os.environ.get('CONDA_EXE')
+	if conda and os.path.isfile(conda):
 		return conda
-	for base in [ os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Programs'), os.path.expanduser('~'), 'C:\\ProgramData' ]:
+	if IS_WINDOWS:
+		bases, executable = [ os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Programs'), os.path.expanduser('~'), 'C:\\ProgramData' ], os.path.join('condabin', 'conda.bat')
+	else:
+		bases, executable = [ os.path.expanduser('~'), '/opt' ], os.path.join('bin', 'conda')
+	for base in bases:
 		for name in [ 'Miniconda3', 'miniconda3', 'Anaconda3', 'anaconda3', 'miniforge3', 'Miniforge3' ]:
-			candidate = os.path.join(base, name, 'condabin', 'conda.bat')
+			candidate = os.path.join(base, name, executable)
 			if os.path.isfile(candidate):
 				return candidate
 	return None
@@ -196,7 +229,7 @@ def find_conda() -> Optional[str]:
 def find_conda_base() -> Optional[str]:
 	conda = find_conda()
 	if conda:
-		# <base>\condabin\conda.bat or <base>\Library\bin\conda.bat or <base>\Scripts\conda.exe
+		# <base>\condabin\conda.bat or <base>\Library\bin\conda.bat or <base>\Scripts\conda.exe, <base>/bin/conda or <base>/condabin/conda
 		path = os.path.dirname(os.path.abspath(conda))
 		for _ in range(3):
 			if os.path.isdir(os.path.join(path, 'envs')) or os.path.isdir(os.path.join(path, 'conda-meta')):
@@ -209,13 +242,17 @@ def find_python_candidates(facefusion_root : str = '') -> List[str]:
 	candidates : List[str] = []
 
 	if facefusion_root:
-		for pattern in [ '.venv\\Scripts\\python.exe', 'venv\\Scripts\\python.exe', '.conda\\python.exe', 'env\\python.exe' ]:
+		if IS_WINDOWS:
+			patterns = [ '.venv\\Scripts\\python.exe', 'venv\\Scripts\\python.exe', '.conda\\python.exe', 'env\\python.exe' ]
+		else:
+			patterns = [ '.venv/bin/python', 'venv/bin/python', '.conda/bin/python', 'env/bin/python' ]
+		for pattern in patterns:
 			candidates.extend(glob.glob(os.path.join(facefusion_root, pattern)))
 
 	conda_base = find_conda_base()
 	if conda_base:
 		for env_dir in sorted(glob.glob(os.path.join(conda_base, 'envs', '*'))):
-			python_path = os.path.join(env_dir, 'python.exe')
+			python_path = env_python(env_dir)
 			if os.path.isfile(python_path):
 				candidates.append(python_path)
 
@@ -252,18 +289,30 @@ def version_tuple(version : Optional[str]) -> tuple:
 def create_process_environment(python_path : str) -> QProcessEnvironment:
 	environment = QProcessEnvironment.systemEnvironment()
 	prefix = get_env_prefix(python_path)
-	path_parts = [ prefix, os.path.join(prefix, 'Scripts') ]
+	path_parts = [ prefix, os.path.join(prefix, 'Scripts') ] if IS_WINDOWS else [ os.path.join(prefix, 'bin') ]
+
+	if not IS_WINDOWS:
+		# opencv of this app adds its own folder and an empty entry (the working directory) when imported, facefusion gets neither
+		library_paths = [ path for path in environment.value('LD_LIBRARY_PATH').split(os.pathsep) if path and not os.path.abspath(path).startswith(sys.prefix + os.sep) ]
+		# what facefusion's own setup_linux adds before it re-spawns itself, which ENVIRONMENT_READY below skips
+		if is_conda_env(python_path):
+			library_paths = [ path for path in [ os.path.join(prefix, 'lib') ] + glob.glob(os.path.join(prefix, 'lib', 'python3*', 'site-packages', 'tensorrt_libs')) if os.path.isdir(path) ] + library_paths
+		if library_paths:
+			environment.insert('LD_LIBRARY_PATH', os.pathsep.join(library_paths))
+		else:
+			environment.remove('LD_LIBRARY_PATH')
 
 	if is_conda_env(python_path):
 		environment.insert('CONDA_PREFIX', prefix)
-		path_parts += \
-		[
-			os.path.join(prefix, 'Library', 'mingw-w64', 'bin'),
-			os.path.join(prefix, 'Library', 'usr', 'bin'),
-			os.path.join(prefix, 'Library', 'bin'),
-			os.path.join(prefix, 'Lib'),
-			os.path.join(prefix, 'Lib', 'site-packages', 'tensorrt_libs')
-		]
+		if IS_WINDOWS:
+			path_parts += \
+			[
+				os.path.join(prefix, 'Library', 'mingw-w64', 'bin'),
+				os.path.join(prefix, 'Library', 'usr', 'bin'),
+				os.path.join(prefix, 'Library', 'bin'),
+				os.path.join(prefix, 'Lib'),
+				os.path.join(prefix, 'Lib', 'site-packages', 'tensorrt_libs')
+			]
 	else:
 		environment.insert('VIRTUAL_ENV', prefix)
 
@@ -272,6 +321,8 @@ def create_process_environment(python_path : str) -> QProcessEnvironment:
 	# skip facefusion's self re-spawn so stop() can terminate a single process tree
 	environment.insert('ENVIRONMENT_READY', '1')
 	environment.insert('OMP_NUM_THREADS', '1')
+	if not IS_WINDOWS:
+		environment.insert('MALLOC_ARENA_MAX', '4')
 	environment.insert('PYTHONUNBUFFERED', '1')
 	environment.insert('PYTHONIOENCODING', 'utf-8')
 	environment.insert('COLUMNS', '200')
@@ -282,9 +333,56 @@ def environment_to_dict(environment : QProcessEnvironment) -> Dict[str, str]:
 	return { key: environment.value(key) for key in environment.keys() }
 
 
+def find_child_processes(pid : int) -> List[int]:
+	"""every process below pid, read from /proc"""
+	children : Dict[int, List[int]] = {}
+	for entry in os.listdir('/proc'):
+		if entry.isdigit():
+			try:
+				with open('/proc/%s/stat' % entry, 'rb') as stat_file:
+					# the name in brackets can hold spaces, the parent id is the second field after it
+					parent = int(stat_file.read().rsplit(b')', 1)[1].split()[1])
+			except (OSError, IndexError, ValueError):
+				continue
+			children.setdefault(parent, []).append(int(entry))
+	found : List[int] = []
+	pending = [ pid ]
+	while pending:
+		for child in children.get(pending.pop(), []):
+			found.append(child)
+			pending.append(child)
+	return found
+
+
 def kill_process_tree(pid : int) -> None:
-	if pid:
+	if not pid:
+		return
+	if IS_WINDOWS:
 		subprocess.run([ 'taskkill', '/PID', str(pid), '/T', '/F' ], capture_output = True, creationflags = CREATE_NO_WINDOW)
+		return
+	# the whole tree like taskkill /T /F, the parent first so it cannot start new children meanwhile
+	for process_id in [ pid ] + find_child_processes(pid):
+		try:
+			os.kill(process_id, signal.SIGKILL)
+		except OSError:
+			pass
+
+
+def reveal_in_file_manager(path : str) -> None:
+	"""opens the folder of path with path picked, in explorer or in the file manager of the desktop"""
+	if IS_WINDOWS:
+		subprocess.Popen([ 'explorer', '/select,', path ])
+		return
+	from PySide6.QtCore import QUrl
+	from PySide6.QtDBus import QDBusConnection, QDBusMessage
+	from PySide6.QtGui import QDesktopServices
+
+	# most linux file managers (dolphin, nautilus, nemo, thunar) can pick a file through the FileManager1 interface
+	message = QDBusMessage.createMethodCall('org.freedesktop.FileManager1', '/org/freedesktop/FileManager1', 'org.freedesktop.FileManager1', 'ShowItems')
+	message.setArguments([ [ QUrl.fromLocalFile(path).toEncoded().data().decode() ], '' ])
+	reply = QDBusConnection.sessionBus().call(message, timeout = 2000)
+	if reply.type() == QDBusMessage.MessageType.ErrorMessage:
+		QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.dirname(path)))
 
 
 def has_nvidia_gpu() -> bool:

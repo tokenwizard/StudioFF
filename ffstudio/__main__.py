@@ -9,7 +9,7 @@ from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import QApplication, QWidget
 
 from ffstudio import splash
-from ffstudio.config import DATA_DIR, migrate_data_dir
+from ffstudio.config import DATA_DIR, UI_FONT, migrate_data_dir
 
 
 def instance_name() -> str:
@@ -72,6 +72,8 @@ def main() -> None:
 	QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
 	app = QApplication(sys.argv)
 	app.setApplicationName('StudioFF')
+	# wayland and x11 match the window to studioff.desktop by this name, for its icon in the taskbar
+	app.setDesktopFileName('studioff')
 
 	if not args.screenshot:
 		if wake_running_instance():
@@ -90,7 +92,7 @@ def main() -> None:
 	splash.step()
 	apply_theme(args.theme or session.config.get('theme') or 'auto', session.config.get('accent_colors'))
 	# one family only: with fallback families the first text box takes a second to appear, windows fills in other scripts anyway
-	setFontFamilies([ 'Segoe UI' ])
+	setFontFamilies([ UI_FONT ])
 	splash.step()
 	window = MainWindow(session)
 

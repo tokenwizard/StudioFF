@@ -6,7 +6,7 @@ StudioFF swaps faces in images, videos and GIFs. Pick the faces to use, pick a t
 the swap on one frame and run it, one target at a time or a whole folder in a batch. Several people in one
 target can each get a different face.
 
-It is a Windows 11 desktop app for FaceFusion v4, which has no built-in UI of its own, only a command line.
+It is a desktop app for Windows 11 and Linux for FaceFusion v4, which has no built-in UI of its own, only a command line.
 StudioFF builds the command for you, runs it in FaceFusion's own Python environment and shows
 progress and the result.
 
@@ -35,18 +35,31 @@ FaceFusion itself is not included: install FaceFusion v4 separately, then point 
 - **Setup**: point the app at an existing FaceFusion v4 or install it from scratch, and check GitHub for FaceFusion updates. It shows whether your FaceFusion is the version StudioFF was tested with, and can switch to that version, to the latest one or back again.
 - **System monitor**: graphics card, processor and memory use in the title bar, read with FaceFusion's own libraries. A bar under each reading goes from green to orange to red as it fills. It can be turned off in Setup.
 - **Custom look**: Auto, Light or Dark theme, with your own accent color for each (one click puts back the standard purple).
-- **Fluent design**: Windows 11 style throughout, a splash screen with a loading bar, and settings remembered between runs.
+- **Fluent design**: Windows 11 style throughout (on Linux too), a splash screen with a loading bar, and settings remembered between runs.
 
 ## Install
+
+On Windows:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 
 This creates `.venv` for the UI (PySide6 + PySide6-Fluent-Widgets + OpenCV) and adds desktop and Start menu
-shortcuts. Then start **StudioFF** and open **Setup**:
+shortcuts.
 
-- **Already have FaceFusion v4?** Pick its folder and the `python.exe` of its environment, or press **Detect**, then press **Save and load options**.
+On Linux:
+
+```bash
+./install.sh
+```
+
+This creates the same `.venv` (with `uv` when it is installed, else `python3 -m venv`) and adds a StudioFF entry to
+your app launcher. You can also start it with `./StudioFF.sh`. Update with `git pull`, the in-app update is Windows only.
+
+Then start **StudioFF** and open **Setup**:
+
+- **Already have FaceFusion v4?** Pick its folder and the Python of its environment (`python.exe` on Windows, `bin/python` on Linux), or press **Detect**, then press **Save and load options**.
 - **No FaceFusion v4 yet?** Use the **Install FaceFusion v4** button in the app's **Setup** page. Note that FaceFusion v4 requires **Python 3.13+**, so a
   FaceFusion 3.x environment (Python 3.12) can't run it.
 
@@ -71,8 +84,8 @@ FaceFusion also needs `ffmpeg`, `ffprobe` and `curl` on `PATH`. Setup checks for
 | `ffstudio/monitor.py` | Talks to `system_monitor.py` and shows its numbers in the title bar |
 | `ffstudio/pages/*` | Studio, Batch, Models, Benchmark, Console, Setup |
 
-App data (settings, cached schema, preview frames) lives in `%APPDATA%\StudioFF` (versions before v0.40 used `%APPDATA%\FaceFusionStudio`,
-which is moved over on the first start). The preview
+App data (settings, cached schema, preview frames) lives in `%APPDATA%\StudioFF` on Windows and `~/.config/StudioFF`
+on Linux (versions before v0.40 used `%APPDATA%\FaceFusionStudio`, which is moved over on the first start). The preview
 folder only ever holds the latest frame and result (overwritten each time) and is deleted when the app
 closes. After **Stop** or a failed run, FaceFusion's temp folder for this machine is cleared too.
 Set `FFSTUDIO_DATA_DIR` to use a different folder.

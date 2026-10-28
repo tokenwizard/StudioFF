@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QFileDialog, QGridLayout, QHBoxLayout, QSizePolicy
 from qfluentwidgets import Action, BodyLabel, CaptionLabel, FlowLayout, FluentIcon, Flyout, FlyoutAnimationType, FlyoutViewBase, IndeterminateProgressBar, LineEdit, PrimaryPushButton, ProgressBar, PushButton, RoundMenu, ScrollArea, SearchLineEdit, SegmentedWidget, SimpleCardWidget, SingleDirectionScrollArea, Slider, StrongBodyLabel, SubtitleLabel, TogglePushButton, ToolTipFilter, TransparentPushButton, TransparentToolButton, themeColor
 
 from ffstudio.config import APP_DIR, PREVIEW_DIR
+from ffstudio.environment import reveal_in_file_manager
 from ffstudio.face_mapping import FACE_PROCESSORS, FRAME_PROCESSORS, LEAVE, PEOPLE_FILE, SELECTED, FaceMappingCard, box_overlap, is_kept, is_mapped, merge_people, people_dir, person_color, person_name, plan_passes
 from ffstudio.faces import FACE_GROUPS, MASK_GROUPS, FaceProbe, describe_faces, describe_landmarks, describe_mask, face_landmarks, face_tag, read_mask
 from ffstudio.media import GIF_EXTENSIONS, VideoReader, extension, format_timecode, media_kind, read_frame, read_image, thumbnail, to_pixmap, write_image
@@ -1364,7 +1365,7 @@ class StudioPage(SourceSelection, QWidget):
 		output_path = self.suggest_output_path()
 		# facefusion only finds out at the very end, after processing the whole target
 		if not folder_is_writable(os.path.dirname(output_path)):
-			self.session.notify.emit('error', 'Cannot save to this folder', 'Windows does not allow saving to %s. Choose another output folder, such as Videos or Documents.' % os.path.dirname(output_path))
+			self.session.notify.emit('error', 'Cannot save to this folder', 'StudioFF cannot save to %s. Choose another output folder, such as Videos or Documents.' % os.path.dirname(output_path))
 			return
 		passes = self.mapping_passes()
 		if passes:
@@ -2114,8 +2115,7 @@ class StudioPage(SourceSelection, QWidget):
 
 	def reveal_output(self) -> None:
 		if self.last_output and os.path.exists(self.last_output):
-			import subprocess
-			subprocess.Popen([ 'explorer', '/select,', self.last_output ])
+			reveal_in_file_manager(self.last_output)
 
 	@staticmethod
 	def open_path(path : str) -> None:

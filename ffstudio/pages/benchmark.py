@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QTableWidg
 from qfluentwidgets import BodyLabel, CaptionLabel, CheckBox, ComboBox, FlowLayout, FluentIcon, PrimaryPushButton, ProgressBar, PushButton, SingleDirectionScrollArea, StrongBodyLabel, SubtitleLabel, TableWidget
 
 from ffstudio.benchmark_report import RESOLUTIONS, format_processors, render_report
-from ffstudio.environment import CREATE_NO_WINDOW, create_process_environment, read_facefusion_version
+from ffstudio.environment import CREATE_NO_WINDOW, IS_WINDOWS, create_process_environment, read_facefusion_version
 from ffstudio.pages.setup import form_row, section_card
 from ffstudio.session import Session
 from ffstudio.widgets import NumberBox, guard_wheel
@@ -43,6 +43,15 @@ class MemoryStatus(ctypes.Structure):
 
 
 def read_cpu_name() -> str:
+	if not IS_WINDOWS:
+		try:
+			with open('/proc/cpuinfo', encoding = 'utf-8') as cpuinfo:
+				for line in cpuinfo:
+					if line.startswith('model name'):
+						return line.split(':', 1)[1].strip()
+		except OSError:
+			pass
+		return ''
 	try:
 		import winreg
 		with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r'HARDWARE\DESCRIPTION\System\CentralProcessor\0') as key:
@@ -52,6 +61,15 @@ def read_cpu_name() -> str:
 
 
 def read_memory_total() -> int:
+	if not IS_WINDOWS:
+		try:
+			with open('/proc/meminfo', encoding = 'utf-8') as meminfo:
+				for line in meminfo:
+					if line.startswith('MemTotal:'):
+						return int(line.split()[1]) * 1024
+		except (OSError, ValueError):
+			pass
+		return 0
 	try:
 		status = MemoryStatus()
 		status.length = ctypes.sizeof(MemoryStatus)
