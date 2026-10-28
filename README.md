@@ -1,5 +1,8 @@
 # StudioFF
 
+> **This fork adds Linux support** to [Icey321/StudioFF](https://github.com/Icey321/StudioFF). Install it with
+> `./install.sh`. [LINUX.md](LINUX.md) lists what changed, what was tested and how this fork keeps up with upstream.
+
 A desktop app for the [FaceFusion v4](https://github.com/facefusion/facefusion/tree/v4) face swapper. Not made or endorsed by the FaceFusion team.
 
 StudioFF swaps faces in images, videos and GIFs. Pick the faces to use, pick a target, preview
